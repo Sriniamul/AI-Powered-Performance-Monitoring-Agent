@@ -260,7 +260,7 @@ When analysis is unavailable, incident creation continues with rule-based RCA in
 
 ## JVM Diagnostics
 
-Set `jvm.pid` in `configs/config.yaml`, or leave `jvm.auto_discover: true` to select a local JVM automatically.
+Leave `jvm.pid: null` and `jvm.auto_discover: true` to select a local JVM automatically. The PID collected during each monitoring cycle is passed directly to heap and thread diagnostics. Set `jvm.pid` only when the agent must target a specific JVM.
 
 - Heap dump: `jcmd <pid> GC.heap_dump <file>` or `jmap -dump:live,format=b,file=<file> <pid>`
 - Thread dump: `jcmd <pid> Thread.print` or `jstack -l <pid>`

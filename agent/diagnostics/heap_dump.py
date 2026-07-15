@@ -13,21 +13,22 @@ class HeapDumpService:
         self.pid = config.get("pid")
         self.enabled = bool(config.get("heap_dump_enabled", True))
 
-    def capture(self):
-        if not self.enabled or not self.pid:
-            logger.info("Heap dump skipped. enabled=%s pid=%s", self.enabled, self.pid)
+    def capture(self, pid=None):
+        target_pid = pid or self.pid
+        if not self.enabled or not target_pid:
+            logger.info("Heap dump skipped. enabled=%s pid=%s", self.enabled, target_pid)
             return []
 
         out_dir = Path("artifacts") / "dumps"
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        out_file = out_dir / f"heapdump-{self.pid}-{stamp}.hprof"
+        out_file = out_dir / f"heapdump-{target_pid}-{stamp}.hprof"
 
         commands = []
         if shutil.which("jcmd"):
-            commands.append(["jcmd", str(self.pid), "GC.heap_dump", str(out_file)])
+            commands.append(["jcmd", str(target_pid), "GC.heap_dump", str(out_file)])
         if shutil.which("jmap"):
-            commands.append(["jmap", f"-dump:live,format=b,file={out_file}", str(self.pid)])
+            commands.append(["jmap", f"-dump:live,format=b,file={out_file}", str(target_pid)])
 
         for cmd in commands:
             try:
@@ -39,6 +40,6 @@ class HeapDumpService:
             except Exception as exc:
                 logger.warning("Heap dump command failed: %s", exc)
 
-        marker = out_dir / f"heapdump-skipped-{self.pid}-{stamp}.txt"
+        marker = out_dir / f"heapdump-skipped-{target_pid}-{stamp}.txt"
         marker.write_text("Heap dump could not be created. Check JDK tools and process permissions.\n", encoding="utf-8")
         return [str(marker)]

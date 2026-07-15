@@ -77,11 +77,12 @@ class AgentController:
 
         logger.warning("Anomaly action triggered: %s", decision.to_dict())
         generated_files = []
+        jvm_pid = metrics.get("jvm_pid")
 
         if decision.capture_heap_dump:
-            generated_files.extend(self.heap_dump.capture())
+            generated_files.extend(self.heap_dump.capture(jvm_pid))
         if decision.capture_thread_dump:
-            generated_files.extend(self.thread_dump.capture())
+            generated_files.extend(self.thread_dump.capture(jvm_pid))
 
         generated_files.extend(self.log_collector.collect())
         generated_files.extend(self.trace_collector.collected_files)

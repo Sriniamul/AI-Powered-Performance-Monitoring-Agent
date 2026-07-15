@@ -13,21 +13,22 @@ class ThreadDumpService:
         self.pid = config.get("pid")
         self.enabled = bool(config.get("thread_dump_enabled", True))
 
-    def capture(self):
-        if not self.enabled or not self.pid:
-            logger.info("Thread dump skipped. enabled=%s pid=%s", self.enabled, self.pid)
+    def capture(self, pid=None):
+        target_pid = pid or self.pid
+        if not self.enabled or not target_pid:
+            logger.info("Thread dump skipped. enabled=%s pid=%s", self.enabled, target_pid)
             return []
 
         out_dir = Path("artifacts") / "dumps"
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        out_file = out_dir / f"threaddump-{self.pid}-{stamp}.txt"
+        out_file = out_dir / f"threaddump-{target_pid}-{stamp}.txt"
 
         commands = []
         if shutil.which("jcmd"):
-            commands.append(["jcmd", str(self.pid), "Thread.print"])
+            commands.append(["jcmd", str(target_pid), "Thread.print"])
         if shutil.which("jstack"):
-            commands.append(["jstack", "-l", str(self.pid)])
+            commands.append(["jstack", "-l", str(target_pid)])
 
         for cmd in commands:
             try:
@@ -40,6 +41,6 @@ class ThreadDumpService:
             except Exception as exc:
                 logger.warning("Thread dump command failed: %s", exc)
 
-        marker = out_dir / f"threaddump-skipped-{self.pid}-{stamp}.txt"
+        marker = out_dir / f"threaddump-skipped-{target_pid}-{stamp}.txt"
         marker.write_text("Thread dump could not be created. Check JDK tools and process permissions.\n", encoding="utf-8")
         return [str(marker)]
