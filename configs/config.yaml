@@ -1,0 +1,65 @@
+agent:
+  service_name: payment-api
+  # Environment is detected automatically from the deployment machine's OS.
+  poll_interval_seconds: 5
+  artifact_dir: artifacts
+  dry_run: true
+
+jvm:
+  # Set a target PID or allow the agent to select the first local JVM.
+  pid: null
+  auto_discover: true
+  heap_dump_enabled: true
+  thread_dump_enabled: true
+
+logs:
+  # Optional application log files to collect. Missing files are ignored.
+  paths:
+    - ./sample-app.log
+  max_tail_lines: 300
+
+traces:
+  # Optional newline-delimited JSON span exports. duration_ms, status,
+  # span_kind and attributes.db.system are analyzed and attached to incidents.
+  paths: []
+  max_spans: 1000
+
+thresholds:
+  # Optional emergency safety limits. Adaptive detection does not use these by default.
+  cpu_percent: 80
+  memory_percent: 80
+  disk_percent: 90
+  jvm_heap_percent: 85
+  consecutive_anomaly_count: 1
+
+disk:
+  # Defaults to the disk containing the agent working directory.
+  path: .
+
+anomaly:
+  mode: adaptive
+  min_samples: 30
+  window_size: 288
+  z_threshold: 4.0
+  min_relative_change: 0.20
+  persistence: 2
+  static_safety_limits: false
+
+llm:
+  enabled: true
+  provider: openai
+  model: gpt-5-mini
+  timeout_seconds: 30
+
+jira:
+  base_url_env: JIRA_BASE_URL
+  email_env: JIRA_EMAIL
+  api_token_env: JIRA_API_TOKEN
+  project_key_env: JIRA_PROJECT_KEY
+  issue_type_env: JIRA_ISSUE_TYPE
+  default_project_key: PERF
+  default_issue_type: Bug
+  labels:
+    - ai-perf-agent
+    - performance
+    - auto-diagnostics

@@ -1,0 +1,11 @@
+version: "3.9"
+services:
+  ai-perf-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    env_file:
+      - ../.env
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../configs:/app/configs

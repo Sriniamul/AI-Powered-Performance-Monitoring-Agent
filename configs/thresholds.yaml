@@ -1,0 +1,9 @@
+cpu:
+  warning: 70
+  critical: 80
+memory:
+  warning: 70
+  critical: 80
+jvm_heap:
+  warning: 75
+  critical: 85
