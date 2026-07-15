@@ -1,204 +1,303 @@
-# AI Performance Monitoring Agent
+# AI-Powered Performance Monitoring Agent
 
-**AI Performance Monitoring Agent** learns each service's normal behavior, detects multi-signal performance anomalies, captures diagnostic evidence, correlates events, and creates a JIRA issue with a likely root cause and artifacts attached.
+The **AI-Powered Performance Monitoring Agent** learns a service's normal resource behavior, detects persistent multi-signal anomalies, captures diagnostic evidence, generates root-cause guidance, and creates a JIRA incident with supporting artifacts.
 
-This repository is designed for hackathons, engineering demos, and enterprise innovation presentations.
+It can run entirely in dry-run mode for local development and demonstrations.
 
----
+## Capabilities
 
-## Key Capabilities
+- Collects machine, CPU, memory, process, disk, network, JVM, log, and trace data
+- Learns per-metric rolling baselines using robust median/MAD scoring
+- Filters transient deviations with relative-change and persistence requirements
+- Optionally applies static emergency thresholds
+- Correlates resource, JVM, database, latency, error, and traffic signals
+- Classifies incidents as high or critical severity
+- Captures JVM heap and thread dumps when configured and available
+- Generates rule-based RCA guidance and optional LLM analysis
+- Supports OpenAI and GitHub Copilot SDK analysis providers
+- Packages metrics, logs, traces, and diagnostics into ZIP artifacts
+- Creates JIRA issues and uploads diagnostic attachments
+- Provides a live dashboard with incident IDs, metrics, causes, and suggested solutions
+- Supports safe local operation without JIRA credentials through dry-run mode
 
-- CPU and memory monitoring
-- JVM process discovery and diagnostics
-- Adaptive rolling baselines (robust median/MAD) with persistence filtering
-- Classification of memory leaks, latency degradation, thread starvation, database bottlenecks, JVM GC issues, traffic spikes, and resource contention
-- Heap dump capture using `jcmd` or `jmap`
-- Thread dump capture using `jcmd` or `jstack`
-- Application log collection
-- Correlated anomaly evidence with observed values and learned baselines
-- Artifact packaging into a compressed `.zip`
-- JIRA issue creation
-- JIRA attachment upload for heap dump, thread dump, logs, and metrics snapshot
-- Dry-run mode for safe local demos without JIRA credentials
-
----
-
-## High-Level Architecture
+## Architecture
 
 ```text
-+--------------------+      +-----------------------+      +-------------------+
-| Metrics Collectors | ---> | AI Anomaly Detector   | ---> | Decision Engine   |
-| CPU, Memory, JVM   |      | Rules + Isolation     |      | Severity + Policy |
-+--------------------+      +-----------------------+      +---------+---------+
-                                                                  |
-                                                                  v
-+--------------------+      +-----------------------+      +-------------------+
-| JIRA Integration   | <--- | Artifact Collector    | <--- | Diagnostics       |
-| Issue + Attachments|      | logs, dumps, metadata |      | heap/thread dumps |
-+--------------------+      +-----------------------+      +-------------------+
+Collectors
+  machine | CPU | memory | process | disk | network | JVM | logs | traces
+      |
+      v
+Adaptive Anomaly Detector
+  rolling median/MAD | relative change | persistence | optional safety limits
+      |
+      v
+Decision Engine
+  action policy | severity | diagnostic selection
+      |
+      +--------------------+
+      |                    |
+      v                    v
+Diagnostics            LLM Analyzer
+  heap/thread dumps       root cause | solution | confidence
+      |                    |
+      +----------+---------+
+                 v
+Artifact Collector and RCA Engine
+  metrics snapshot | logs | traces | dumps | ZIP bundle
+                 |
+                 v
+JIRA Integration and Notification
+  issue key | attachments | console output
+                 |
+                 v
+Dashboard
+  incident ID | detected issue | evidence | cause | suggested solution
 ```
 
----
+The controller in `agent/agent_controller.py` coordinates one pass through this pipeline. The long-running entry point in `agent/main.py` invokes it at the configured polling interval.
 
 ## Repository Structure
 
 ```text
-ai-perf-agent/
-├── agent/                  # Core Python package
-│   ├── collectors/          # CPU, memory, JVM, and log collectors
-│   ├── anomaly/             # AI and rules-based anomaly detection
-│   ├── decision/            # Decision and severity logic
-│   ├── diagnostics/         # Heap and thread dump capture
-│   ├── artifact/            # Artifact collection and packaging
-│   ├── jira/                # JIRA issue and attachment integration
-│   ├── rca/                 # RCA insight generation
-│   ├── notification/        # Console notifier placeholder
-│   └── utils/               # Config and logging helpers
-├── configs/                 # YAML configuration files
-├── scripts/                 # Demo scripts
-├── tests/                   # Unit tests
-├── docker/                  # Dockerfile and compose file
-├── docs/                    # Architecture and demo guide
-├── .github/workflows/       # CI workflow
-└── README.md
+AI-Powered-Performance-Monitoring-Agent/
+|-- agent/
+|   |-- main.py                 # Monitoring process entry point
+|   |-- agent_controller.py     # Pipeline orchestration
+|   |-- dashboard.py            # Local dashboard and JSON API
+|   |-- collectors/             # Machine, resource, JVM, log, and trace collectors
+|   |-- anomaly/                # Adaptive anomaly detection and feature logic
+|   |-- decision/               # Incident policy and severity selection
+|   |-- diagnostics/            # Heap, thread, and GC diagnostics
+|   |-- artifact/               # Snapshot and ZIP artifact generation
+|   |-- rca/                    # Rule-based and LLM incident analysis
+|   |-- jira/                   # JIRA payload, client, issue, and attachment logic
+|   |-- notification/           # Console, email, and Slack notifier modules
+|   `-- utils/                  # Configuration, constants, logging, and helpers
+|-- configs/
+|   |-- config.yaml             # Active agent configuration
+|   `-- thresholds.yaml         # Additional threshold configuration
+|-- scripts/                    # Agent launcher and workload simulators
+|-- tests/                      # Pytest suite
+|-- docker/                     # Dockerfile and Docker Compose configuration
+|-- docs/                       # Architecture, API, and demo documentation
+|-- pyproject.toml              # Package metadata and dependencies
+|-- requirements.txt            # Runtime and test dependencies
+|-- .env.example                # Environment variable template
+`-- README.md
 ```
 
----
+Generated runtime files are written to `artifacts/` by default. Package builds are written to `dist/`.
+
+## Requirements
+
+- Python 3.10 or newer
+- JDK diagnostic tools (`jcmd`, `jmap`, or `jstack`) only when JVM dump capture is required
+- JIRA Cloud credentials only when dry-run mode is disabled
+- An OpenAI API key or Copilot credentials only when the corresponding LLM provider is enabled
 
 ## Quick Start
 
-### 1. Create a virtual environment
+### 1. Create and activate a virtual environment
+
+Linux or macOS:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate   # Linux/macOS
-# .venv\Scripts\activate    # Windows PowerShell
+source .venv/bin/activate
 ```
 
-### 2. Install dependencies
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 2. Install the project
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -e .[test]
 ```
 
-### 3. Configure the agent
+Alternatively, install the pinned project requirements:
 
-Copy the example environment file:
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 3. Create the environment file
+
+Linux or macOS:
 
 ```bash
 cp .env.example .env
 ```
 
-For local demo, keep:
+Windows PowerShell:
 
-```bash
-DRY_RUN=true
+```powershell
+Copy-Item .env.example .env
 ```
 
-For real JIRA integration, set:
+Keep `DRY_RUN=true` for local use. The agent then writes the proposed JIRA payload to `artifacts/dry_run_jira_issue.json` and returns the incident ID `DRY-RUN-1` without contacting JIRA.
+
+### 4. Start continuous monitoring
 
 ```bash
-DRY_RUN=false
-JIRA_BASE_URL=https://your-domain.atlassian.net
-JIRA_EMAIL=your.email@company.com
-JIRA_API_TOKEN=your_api_token
-JIRA_PROJECT_KEY=PERF
+python -m agent.main --config configs/config.yaml
 ```
 
-### 4. Run the agent in demo mode
+The default adaptive detector needs 30 samples to learn its baseline. With the default five-second polling interval, initial learning takes approximately 2.5 minutes. It then requires two consecutive anomalous samples before creating an incident.
+
+Use `--once` for a collection smoke test:
 
 ```bash
 python -m agent.main --config configs/config.yaml --once
 ```
 
-### 5. Simulate CPU spike
+A fresh adaptive detector normally reports `learning_baseline` during a single-cycle run.
+
+### 5. Start the dashboard
 
 In another terminal:
-
-```bash
-python scripts/simulate_cpu_spike.py
-```
-
-### 6. Simulate memory pressure
-
-```bash
-python scripts/simulate_memory_pressure.py
-```
-
-### 7. Open the incident dashboard
-
-Start the local dashboard in another terminal:
 
 ```bash
 python -m agent.dashboard
 ```
 
-Then open `http://127.0.0.1:8080`. The dashboard refreshes every five seconds and
-shows detected issues with timestamps, environment, service, severity, CPU, and memory details.
+Open `http://127.0.0.1:8080`. The dashboard refreshes every five seconds and reads incident snapshots from `artifacts/`.
 
----
+Useful endpoints:
+
+- Dashboard: `http://127.0.0.1:8080/`
+- Incident API: `http://127.0.0.1:8080/api/issues?limit=250`
+- Health check: `http://127.0.0.1:8080/health`
+
+The incident table includes the created JIRA or dry-run incident ID. Snapshots created by older versions that do not contain an issue key display `-` in that column.
+
+## Workload Simulators
+
+Run a simulator while continuous monitoring is active and has learned a stable baseline:
+
+```bash
+python scripts/simulate_cpu_spike.py
+python scripts/simulate_memory_pressure.py
+```
+
+The Java memory leak example is located at `scripts/simulate_memory_leak.java`.
+
+## Configuration
+
+The primary configuration file is `configs/config.yaml`.
+
+### Adaptive anomaly detection
+
+```yaml
+anomaly:
+  mode: adaptive
+  min_samples: 30
+  window_size: 288
+  z_threshold: 4.0
+  min_relative_change: 0.20
+  persistence: 2
+  static_safety_limits: false
+```
+
+Set `static_safety_limits: true` to evaluate the values under `thresholds` in addition to learned baselines.
+
+### Logs and traces
+
+Configure application logs under `logs.paths`. Missing files are ignored. Configure newline-delimited JSON span exports under `traces.paths`; the trace collector evaluates duration, status, span kind, and database-system attributes.
+
+### LLM analysis
+
+The `llm` section selects the provider, model, and timeout. Environment variables override provider credentials and model selection:
+
+```dotenv
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5-mini
+LLM_PROVIDER=openai
+COPILOT_KEY=
+COPILOT_MODEL=gpt-5
+```
+
+When analysis is unavailable, incident creation continues with rule-based RCA instead of failing the monitoring cycle.
 
 ## JVM Diagnostics
 
-If you provide a JVM PID in `configs/config.yaml`, the agent can attempt to capture:
+Set `jvm.pid` in `configs/config.yaml`, or leave `jvm.auto_discover: true` to select a local JVM automatically.
 
 - Heap dump: `jcmd <pid> GC.heap_dump <file>` or `jmap -dump:live,format=b,file=<file> <pid>`
 - Thread dump: `jcmd <pid> Thread.print` or `jstack -l <pid>`
 
-The user running the agent must have permission to inspect the target JVM process.
+The account running the agent must be allowed to inspect the target JVM. Missing diagnostic tools are handled without crashing the monitoring cycle.
 
----
+## JIRA Integration
 
-## JIRA Ticket Creation
+For real JIRA issue creation, set the following values in `.env`:
 
-When an anomaly is detected, the agent can create a JIRA issue with:
+```dotenv
+DRY_RUN=false
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_EMAIL=your.email@company.com
+JIRA_API_TOKEN=replace_me
+JIRA_PROJECT_KEY=PERF
+JIRA_ISSUE_TYPE=Bug
+```
 
-- Service name
-- Environment
-- Severity
-- CPU and memory values
-- Anomaly reason
-- RCA hint
-- Artifact ZIP
-- Individual files such as thread dump, heap dump, log sample, and metrics snapshot
+For each actionable anomaly, the agent:
 
-### Dry-run behavior
+1. Collects diagnostics and relevant logs or traces.
+2. Generates LLM and rule-based RCA guidance.
+3. Writes `artifacts/metrics_snapshot_<timestamp>.json`.
+4. Creates `artifacts/ai_perf_agent_artifacts_<timestamp>.zip`.
+5. Creates a JIRA issue or dry-run payload.
+6. Uploads available attachments when real JIRA integration is enabled.
+7. Records the returned issue key in the metrics snapshot for the dashboard.
 
-When `DRY_RUN=true`, the agent does **not** call JIRA. Instead, it writes a local file under `artifacts/dry_run_jira_issue.json`.
+## Build and Test
 
----
+Run the test suite:
 
-## Demo Flow for Hackathon
+```bash
+python -m pytest -q
+```
 
-1. Start the agent in dry-run mode.
-2. Run CPU or memory pressure simulator.
-3. The agent detects anomaly.
-4. The agent captures diagnostics.
-5. The agent packages artifacts.
-6. The agent creates a dry-run JIRA issue JSON or real JIRA ticket if configured.
+Build the wheel:
 
----
+```bash
+python -m pip install build
+python -m build --wheel
+```
 
-## Security Notes
+The generated wheel is placed under `dist/`.
 
-- Do not commit `.env` files or API tokens.
-- Heap dumps can contain sensitive data.
-- Use retention policies for generated artifacts.
-- Consider masking logs before upload.
-- Validate attachment file size limits in your JIRA instance.
+## Docker
 
----
+Docker assets are stored under `docker/`:
 
-## Roadmap
+```bash
+docker build -f docker/Dockerfile -t ai-performance-agent .
+docker compose -f docker/docker-compose.yml up
+```
 
-- Kubernetes pod diagnostics
-- Prometheus / OpenTelemetry integration
-- GenAI RCA summarization
-- JIRA deduplication using JQL
-- Teams / Slack notification
-- Cost and capacity recommendation engine
+Review volume mounts, `.env`, JVM access, and artifact retention before using the container against a host workload.
 
----
+## Security
+
+- Never commit `.env`, API tokens, or credentials.
+- Treat heap dumps, thread dumps, traces, and application logs as sensitive data.
+- Apply retention and access policies to `artifacts/`.
+- Mask secrets and personal data before uploading diagnostic files.
+- Review JIRA attachment-size limits before enabling dump uploads.
+- Run the agent with only the operating-system permissions it needs.
+
+## Additional Documentation
+
+- [Architecture](docs/architecture.md)
+- [API reference](docs/api_reference.md)
+- [Demo guide](docs/demo_guide.md)
+- [License](LICENSE)
 
 ## License
 
