@@ -3,6 +3,7 @@ README.md
 pyproject.toml
 agent/__init__.py
 agent/agent_controller.py
+agent/dashboard.py
 agent/main.py
 agent/anomaly/__init__.py
 agent/anomaly/anomaly_detector.py
@@ -14,9 +15,14 @@ agent/artifact/compressor.py
 agent/artifact/metadata_builder.py
 agent/collectors/__init__.py
 agent/collectors/cpu_collector.py
+agent/collectors/disk_collector.py
 agent/collectors/jvm_collector.py
 agent/collectors/log_collector.py
+agent/collectors/machine_collector.py
 agent/collectors/memory_collector.py
+agent/collectors/network_collector.py
+agent/collectors/process_collector.py
+agent/collectors/trace_collector.py
 agent/decision/__init__.py
 agent/decision/decision_engine.py
 agent/decision/rules_engine.py
@@ -35,6 +41,7 @@ agent/notification/email_notifier.py
 agent/notification/slack_notifier.py
 agent/rca/__init__.py
 agent/rca/insights_generator.py
+agent/rca/llm_analyzer.py
 agent/rca/rca_engine.py
 agent/utils/__init__.py
 agent/utils/config.py
@@ -46,6 +53,14 @@ ai_perf_agent.egg-info/SOURCES.txt
 ai_perf_agent.egg-info/dependency_links.txt
 ai_perf_agent.egg-info/requires.txt
 ai_perf_agent.egg-info/top_level.txt
+tests/test_adaptive_anomaly.py
 tests/test_anomaly.py
+tests/test_dashboard.py
 tests/test_decision.py
+tests/test_extended_collectors.py
 tests/test_jira_payload.py
+tests/test_jvm_collector.py
+tests/test_llm_analyzer.py
+tests/test_machine_collector.py
+tests/test_rca_solutions.py
+tests/test_trace_collector.py

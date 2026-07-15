@@ -31,6 +31,11 @@ def build_issue_payload(config: dict, metrics: dict, decision: dict, insights: d
 
 
 def build_description(metrics: dict, decision: dict, insights: dict) -> str:
+    fixes = insights.get("proposed_fixes", [])
+    fixes_text = "\n".join(
+        f"- {fix.get('action')} [{fix.get('risk', 'unknown')} risk]: {fix.get('when')}"
+        for fix in fixes
+    ) or "- No automated fix proposed; investigate the attached evidence."
     return (
         "AI Performance Monitoring Agent detected a performance anomaly.\n\n"
         f"Service: {metrics.get('service_name')}\n"
@@ -48,5 +53,7 @@ def build_description(metrics: dict, decision: dict, insights: dict) -> str:
         "RCA Insight:\n"
         f"{insights.get('summary')}\n\n"
         "Recommended next action:\n"
-        f"{insights.get('recommendation')}\n"
+        f"{insights.get('recommendation')}\n\n"
+        "Suggested fixes (operator approval required):\n"
+        f"{fixes_text}\n"
     )

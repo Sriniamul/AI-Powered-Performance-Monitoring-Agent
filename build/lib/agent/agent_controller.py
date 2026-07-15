@@ -2,14 +2,20 @@ from datetime import datetime, timezone
 
 from agent.collectors.cpu_collector import CpuCollector
 from agent.collectors.memory_collector import MemoryCollector
+from agent.collectors.machine_collector import MachineCollector
+from agent.collectors.process_collector import ProcessCollector
+from agent.collectors.disk_collector import DiskCollector
+from agent.collectors.network_collector import NetworkCollector
 from agent.collectors.jvm_collector import JvmCollector
 from agent.collectors.log_collector import LogCollector
+from agent.collectors.trace_collector import TraceCollector
 from agent.anomaly.anomaly_detector import HybridAnomalyDetector
 from agent.decision.decision_engine import DecisionEngine
 from agent.diagnostics.heap_dump import HeapDumpService
 from agent.diagnostics.thread_dump import ThreadDumpService
 from agent.artifact.artifact_collector import ArtifactCollector
 from agent.rca.rca_engine import RcaEngine
+from agent.rca.llm_analyzer import LlmIncidentAnalyzer
 from agent.jira.jira_client import JiraClient
 from agent.jira.issue_creator import JiraIssueCreator
 from agent.notification.console_notifier import ConsoleNotifier
@@ -25,14 +31,20 @@ class AgentController:
         self.config = config
         self.cpu_collector = CpuCollector()
         self.memory_collector = MemoryCollector()
+        self.machine_collector = MachineCollector()
+        self.process_collector = ProcessCollector()
+        self.disk_collector = DiskCollector(config.get("disk", {}).get("path", "."))
+        self.network_collector = NetworkCollector()
         self.jvm_collector = JvmCollector(config.get("jvm", {}))
         self.log_collector = LogCollector(config.get("logs", {}))
+        self.trace_collector = TraceCollector(config.get("traces", {}))
         self.detector = HybridAnomalyDetector(config)
         self.decision_engine = DecisionEngine(config)
         self.heap_dump = HeapDumpService(config.get("jvm", {}))
         self.thread_dump = ThreadDumpService(config.get("jvm", {}))
         self.artifacts = ArtifactCollector(config)
         self.rca = RcaEngine()
+        self.llm_analyzer = LlmIncidentAnalyzer(config)
         self.jira_client = JiraClient(config)
         self.issue_creator = JiraIssueCreator(config, self.jira_client)
         self.notifier = ConsoleNotifier()
@@ -58,6 +70,8 @@ class AgentController:
             generated_files.extend(self.thread_dump.capture())
 
         generated_files.extend(self.log_collector.collect())
+        generated_files.extend(self.trace_collector.collected_files)
+        metrics["llm"] = self.llm_analyzer.analyze(metrics, decision.to_dict())
         artifacts = self.artifacts.build_bundle(metrics=metrics, decision=decision.to_dict(), files=generated_files)
         insights = self.rca.generate(metrics, decision.to_dict(), artifacts)
         issue_key = self.issue_creator.create_incident(metrics, decision.to_dict(), insights, artifacts)
@@ -72,12 +86,18 @@ class AgentController:
         }
 
     def collect_metrics(self, timestamp: str):
+        machine = self.machine_collector.collect()
         metrics = {
             "timestamp": timestamp,
             "service_name": self.config.get("agent", {}).get("service_name", "unknown-service"),
-            "environment": self.config.get("agent", {}).get("environment", "unknown"),
+            "environment": machine["os_environment"],
         }
+        metrics.update(machine)
         metrics.update(self.cpu_collector.collect())
         metrics.update(self.memory_collector.collect())
+        metrics.update(self.process_collector.collect())
+        metrics.update(self.disk_collector.collect())
+        metrics.update(self.network_collector.collect())
         metrics.update(self.jvm_collector.collect())
+        metrics.update(self.trace_collector.collect())
         return metrics
