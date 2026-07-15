@@ -80,13 +80,14 @@ AI-Powered-Performance-Monitoring-Agent/
 |-- tests/                      # Pytest suite
 |-- docker/                     # Dockerfile and Docker Compose configuration
 |-- docs/                       # Architecture, API, and demo documentation
+|-- logs/                       # Runtime and configured application logs
 |-- pyproject.toml              # Package metadata and dependencies
 |-- requirements.txt            # Runtime and test dependencies
 |-- .env.example                # Environment variable template
 `-- README.md
 ```
 
-Generated runtime files are written to `artifacts/` by default. Package builds are written to `dist/`.
+Generated diagnostic files are written to `artifacts/`, runtime logs to `logs/`, and package builds to `dist/`.
 
 ## Requirements
 

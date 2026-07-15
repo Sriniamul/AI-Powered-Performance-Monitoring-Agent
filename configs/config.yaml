@@ -15,7 +15,7 @@ jvm:
 logs:
   # Optional application log files to collect. Missing files are ignored.
   paths:
-    - ./sample-app.log
+    - ./logs/sample-app.log
   max_tail_lines: 300
 
 traces:
