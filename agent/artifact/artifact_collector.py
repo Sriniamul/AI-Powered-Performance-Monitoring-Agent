@@ -22,3 +22,9 @@ class ArtifactCollector:
             "files": all_files,
             "metrics_snapshot": str(snapshot),
         }
+
+    def record_issue_key(self, snapshot_path: str, issue_key: str):
+        snapshot = Path(snapshot_path)
+        payload = json.loads(snapshot.read_text(encoding="utf-8"))
+        payload["issue_key"] = issue_key
+        snapshot.write_text(json.dumps(payload, indent=2), encoding="utf-8")

@@ -75,6 +75,7 @@ class AgentController:
         artifacts = self.artifacts.build_bundle(metrics=metrics, decision=decision.to_dict(), files=generated_files)
         insights = self.rca.generate(metrics, decision.to_dict(), artifacts)
         issue_key = self.issue_creator.create_incident(metrics, decision.to_dict(), insights, artifacts)
+        self.artifacts.record_issue_key(artifacts["metrics_snapshot"], issue_key)
         self.notifier.notify(issue_key, decision.to_dict(), insights)
 
         return {

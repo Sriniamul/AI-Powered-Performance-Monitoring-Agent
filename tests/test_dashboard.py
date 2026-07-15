@@ -6,6 +6,7 @@ from agent.dashboard import describe_cause, describe_process_attribution, load_i
 def test_load_issues_returns_newest_incidents(tmp_path):
     for stamp, severity in [("20260101T010101Z", "high"), ("20260102T010101Z", "critical")]:
         payload = {
+            "issue_key": f"PERF-{stamp[-2:]}",
             "metrics": {"timestamp": stamp, "service_name": "api", "environment": "test", "machine_name": "host-1", "cpu_percent": 91},
             "decision": {"should_act": True, "severity": severity, "reason": "cpu_percent_above_80"},
         }
@@ -17,6 +18,7 @@ def test_load_issues_returns_newest_incidents(tmp_path):
     assert [issue["severity"] for issue in issues] == ["critical", "high"]
     assert issues[0]["environment"] == "test"
     assert issues[0]["machine_name"] == "host-1"
+    assert issues[0]["incident_id"] == "PERF-1Z"
     assert "CPU utilization reached 91.0%" in issues[0]["cause"]
 
 
