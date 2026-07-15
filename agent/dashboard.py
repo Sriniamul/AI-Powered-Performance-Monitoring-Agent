@@ -6,6 +6,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from agent.utils.config import load_config
+from agent.utils.logger import configure_logging, get_logger
+
+
+logger = get_logger(__name__)
+
 
 def load_issues(artifact_dir: str | Path, limit: int = 250) -> list[dict]:
     """Load incident snapshots, newest first, ignoring partial/corrupt files."""
@@ -172,9 +178,12 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--artifacts", default="artifacts")
+    parser.add_argument("--config", default="configs/config.yaml")
     args = parser.parse_args()
+    config = load_config(args.config)
+    configure_logging(config, "dashboard")
     server = ThreadingHTTPServer((args.host, args.port), make_handler(Path(args.artifacts)))
-    print(f"Dashboard running at http://{args.host}:{args.port}", flush=True)
+    logger.info("Dashboard running at http://%s:%s", args.host, args.port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

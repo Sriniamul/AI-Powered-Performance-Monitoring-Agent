@@ -18,6 +18,7 @@ from agent.rca.rca_engine import RcaEngine
 from agent.rca.llm_analyzer import LlmIncidentAnalyzer
 from agent.jira.jira_client import JiraClient
 from agent.jira.issue_creator import JiraIssueCreator
+from agent.incident_deduplicator import IncidentDeduplicator
 from agent.notification.console_notifier import ConsoleNotifier
 from agent.utils.logger import get_logger
 
@@ -47,6 +48,7 @@ class AgentController:
         self.llm_analyzer = LlmIncidentAnalyzer(config)
         self.jira_client = JiraClient(config)
         self.issue_creator = JiraIssueCreator(config, self.jira_client)
+        self.incident_deduplicator = IncidentDeduplicator(config)
         self.notifier = ConsoleNotifier()
 
     def run_cycle(self):
@@ -60,6 +62,18 @@ class AgentController:
         if not decision.should_act:
             logger.info("No incident action required. reason=%s", decision.reason)
             return {"status": "no_action", "metrics": metrics, "decision": decision.to_dict()}
+
+        duplicate = self.incident_deduplicator.find_duplicate(
+            metrics.get("service_name", "unknown-service"), decision.anomaly_types
+        )
+        if duplicate:
+            logger.info("Duplicate incident suppressed. existing_issue=%s", duplicate.get("issue_key"))
+            return {
+                "status": "duplicate_suppressed",
+                "issue_key": duplicate.get("issue_key"),
+                "metrics": metrics,
+                "decision": decision.to_dict(),
+            }
 
         logger.warning("Anomaly action triggered: %s", decision.to_dict())
         generated_files = []
@@ -76,6 +90,9 @@ class AgentController:
         insights = self.rca.generate(metrics, decision.to_dict(), artifacts)
         issue_key = self.issue_creator.create_incident(metrics, decision.to_dict(), insights, artifacts)
         self.artifacts.record_issue_key(artifacts["metrics_snapshot"], issue_key)
+        self.incident_deduplicator.record(
+            metrics.get("service_name", "unknown-service"), decision.anomaly_types, issue_key
+        )
         self.notifier.notify(issue_key, decision.to_dict(), insights)
 
         return {

@@ -2,9 +2,17 @@
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import json
 from math import isfinite
+from pathlib import Path
 from statistics import median
 from typing import Dict
+
+from agent.utils.logger import get_logger
+
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -60,9 +68,13 @@ class HybridAnomalyDetector:
         self.min_relative_change = float(cfg.get("min_relative_change", 0.20))
         self.persistence = max(1, int(cfg.get("persistence", 2)))
         self.static_safety_limits = bool(cfg.get("static_safety_limits", cfg.get("mode") != "adaptive"))
+        self.persist_state = bool(cfg.get("persist_state", False))
+        artifact_dir = Path(config.get("agent", {}).get("artifact_dir", "artifacts"))
+        self.state_path = Path(cfg.get("state_path", artifact_dir / "anomaly_state.json"))
         self.history = defaultdict(lambda: deque(maxlen=self.window_size))
         self.previous_counters = {}
         self.consecutive = defaultdict(int)
+        self._load_state()
 
     def detect(self, metrics: Dict) -> AnomalyResult:
         values = self._features(metrics)
@@ -109,13 +121,58 @@ class HybridAnomalyDetector:
         if not deviations:
             learned = min((len(v) for v in self.history.values()), default=0)
             reason = "learning_baseline" if learned < self.min_samples else "normal_for_learned_baseline"
-            return AnomalyResult(False, 0.0, reason, values, (), {})
+            result = AnomalyResult(False, 0.0, reason, values, (), {})
+            self._save_state()
+            return result
 
         score = max(float(item.get("robust_z_score", self.z_threshold)) for item in deviations.values())
         reason = ",".join(types) if types else "behavioral_anomaly"
         if any(item.get("source") == "safety_limit" for item in deviations.values()):
             reason += ":" + ",".join(sorted(deviations))
-        return AnomalyResult(True, score, reason, values, tuple(types or ["behavioral_anomaly"]), deviations)
+        result = AnomalyResult(True, score, reason, values, tuple(types or ["behavioral_anomaly"]), deviations)
+        self._save_state()
+        return result
+
+    def _load_state(self):
+        if not self.persist_state or not self.state_path.exists():
+            return
+        try:
+            payload = json.loads(self.state_path.read_text(encoding="utf-8"))
+            if payload.get("version") != 1:
+                logger.warning("Ignoring unsupported anomaly state version in %s", self.state_path)
+                return
+            for name, points in payload.get("history", {}).items():
+                valid = [float(point) for point in points if isinstance(point, (int, float)) and isfinite(float(point))]
+                self.history[name].extend(valid[-self.window_size:])
+            self.previous_counters.update({
+                name: float(value) for name, value in payload.get("previous_counters", {}).items()
+                if isinstance(value, (int, float)) and isfinite(float(value))
+            })
+            self.consecutive.update({
+                name: max(0, int(value)) for name, value in payload.get("consecutive", {}).items()
+                if isinstance(value, (int, float))
+            })
+            logger.info("Restored anomaly baseline state from %s", self.state_path)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            logger.warning("Could not restore anomaly state from %s: %s", self.state_path, exc)
+
+    def _save_state(self):
+        if not self.persist_state:
+            return
+        payload = {
+            "version": 1,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "history": {name: list(points) for name, points in self.history.items()},
+            "previous_counters": self.previous_counters,
+            "consecutive": dict(self.consecutive),
+        }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+            temporary.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            temporary.replace(self.state_path)
+        except OSError as exc:
+            logger.warning("Could not persist anomaly state to %s: %s", self.state_path, exc)
 
     def _features(self, metrics):
         result = {}

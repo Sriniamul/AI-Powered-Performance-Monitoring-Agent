@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 from agent.agent_controller import AgentController
 from agent.utils.config import load_config
-from agent.utils.logger import get_logger
+from agent.utils.logger import configure_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -20,6 +20,7 @@ def main():
     load_dotenv()
     args = parse_args()
     config = load_config(args.config)
+    configure_logging(config, "agent")
     controller = AgentController(config)
 
     if args.once:

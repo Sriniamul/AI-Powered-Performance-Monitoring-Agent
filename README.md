@@ -8,7 +8,9 @@ It can run entirely in dry-run mode for local development and demonstrations.
 
 - Collects machine, CPU, memory, process, disk, network, JVM, log, and trace data
 - Learns per-metric rolling baselines using robust median/MAD scoring
+- Persists learned baselines across agent restarts
 - Filters transient deviations with relative-change and persistence requirements
+- Suppresses duplicate incidents during a configurable cooldown period
 - Optionally applies static emergency thresholds
 - Correlates resource, JVM, database, latency, error, and traffic signals
 - Classifies incidents as high or critical severity
@@ -16,6 +18,8 @@ It can run entirely in dry-run mode for local development and demonstrations.
 - Generates rule-based RCA guidance and optional LLM analysis
 - Supports OpenAI and GitHub Copilot SDK analysis providers
 - Packages metrics, logs, traces, and diagnostics into ZIP artifacts
+- Removes expired artifacts and caps retained artifact file count
+- Rotates agent and dashboard logs by size with bounded backups
 - Creates JIRA issues and uploads diagnostic attachments
 - Provides a live dashboard with incident IDs, metrics, causes, and suggested solutions
 - Supports safe local operation without JIRA credentials through dry-run mode
@@ -28,7 +32,7 @@ Collectors
       |
       v
 Adaptive Anomaly Detector
-  rolling median/MAD | relative change | persistence | optional safety limits
+  rolling median/MAD | persisted state | relative change | persistence
       |
       v
 Decision Engine
@@ -191,6 +195,25 @@ The Java memory leak example is located at `scripts/simulate_memory_leak.java`.
 
 The primary configuration file is `configs/config.yaml`.
 
+### Log rotation and artifact retention
+
+```yaml
+logging:
+  directory: logs
+  level: INFO
+  max_bytes: 5242880
+  backup_count: 5
+
+artifact_retention:
+  enabled: true
+  max_age_days: 14
+  max_files: 500
+```
+
+The agent writes `logs/agent.log`, while the dashboard writes `logs/dashboard.log`. When a file reaches `max_bytes`, it is rolled to numbered backups such as `agent.log.1`; only `backup_count` backups are retained.
+
+Artifact retention runs when the controller starts and after a successful incident is recorded. It removes files older than `max_age_days`, then retains only the newest `max_files` files across `artifacts/` and its subdirectories. The persistent `anomaly_state.json` and `incident_registry.json` files are always protected.
+
 ### Adaptive anomaly detection
 
 ```yaml
@@ -202,9 +225,20 @@ anomaly:
   min_relative_change: 0.20
   persistence: 2
   static_safety_limits: false
+  persist_state: true
+  state_path: artifacts/anomaly_state.json
+
+incidents:
+  deduplication_enabled: true
+  cooldown_seconds: 3600
+  state_path: artifacts/incident_registry.json
 ```
 
 Set `static_safety_limits: true` to evaluate the values under `thresholds` in addition to learned baselines.
+
+The detector writes its rolling history, counter values, and persistence streaks to `anomaly_state.json` after every sample. On restart, it restores that state instead of repeating the initial baseline-learning period.
+
+Incident deduplication uses the configured service name plus the sorted anomaly types as its key. A matching anomaly detected within `cooldown_seconds` returns `duplicate_suppressed` and reuses the existing issue key without running diagnostics, LLM analysis, artifact generation, or JIRA creation again. Different services and different anomaly classifications remain independent. The registry is written only after successful incident creation.
 
 ### Logs and traces
 

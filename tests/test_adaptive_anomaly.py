@@ -36,3 +36,23 @@ def test_deadlock_is_immediately_actionable():
     result = detector().detect({"jvm_deadlock_detected": True})
     assert result.is_anomaly
     assert result.anomaly_types == ("thread_starvation",)
+
+
+def test_persisted_baseline_is_restored_after_restart(tmp_path):
+    state_path = tmp_path / "anomaly_state.json"
+    config = {
+        "anomaly": {
+            "mode": "adaptive", "min_samples": 5, "persistence": 1,
+            "z_threshold": 3, "min_relative_change": .2,
+            "persist_state": True, "state_path": str(state_path),
+        }
+    }
+    first_process = HybridAnomalyDetector(config)
+    for value in (100, 101, 99, 100, 102):
+        first_process.detect({"response_time_p95_ms": value})
+
+    restarted_process = HybridAnomalyDetector(config)
+    result = restarted_process.detect({"response_time_p95_ms": 180})
+
+    assert result.is_anomaly
+    assert result.evidence["response_time_p95_ms"]["baseline"] == 100

@@ -5,6 +5,17 @@ agent:
   artifact_dir: artifacts
   dry_run: true
 
+logging:
+  directory: logs
+  level: INFO
+  max_bytes: 5242880
+  backup_count: 5
+
+artifact_retention:
+  enabled: true
+  max_age_days: 14
+  max_files: 500
+
 jvm:
   # Set a target PID or allow the agent to select the first local JVM.
   pid: null
@@ -44,6 +55,13 @@ anomaly:
   min_relative_change: 0.20
   persistence: 2
   static_safety_limits: false
+  persist_state: true
+  state_path: artifacts/anomaly_state.json
+
+incidents:
+  deduplication_enabled: true
+  cooldown_seconds: 3600
+  state_path: artifacts/incident_registry.json
 
 llm:
   enabled: true
