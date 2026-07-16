@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from agent.utils.config import load_config
 from agent.utils.logger import configure_logging, get_logger
+from agent.machine_config import delete_machine, list_machines, save_machine
 
 
 logger = get_logger(__name__)
@@ -131,7 +132,7 @@ HTML = r'''<!doctype html>
 <style>
 :root{color-scheme:dark;--bg:#07111f;--panel:#0e1b2d;--line:#21334b;--muted:#91a4bd;--text:#eef5ff;--blue:#54a8ff;--red:#ff5876;--orange:#ffad42;--green:#42d9a1}*{box-sizing:border-box}body{margin:0;font:14px Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at 10% 0,#132b4b 0,transparent 35%),var(--bg);color:var(--text)}main{max-width:1280px;margin:auto;padding:32px 24px}.top{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:26px}h1{margin:0;font-size:28px;letter-spacing:-.5px}.subtitle{color:var(--muted);margin-top:7px}.live{display:flex;align-items:center;gap:8px;color:var(--green);font-weight:600}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green)}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.card,.toolbar,.tablebox{background:rgba(14,27,45,.92);border:1px solid var(--line);border-radius:14px}.card{padding:20px}.label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.8px}.value{font-size:29px;font-weight:700;margin-top:8px}.toolbar{display:flex;gap:12px;padding:14px;margin-bottom:14px}select,input{background:#091626;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px 12px;outline:none}input{flex:1;min-width:180px}.tablebox{overflow:auto;max-height:62vh;scrollbar-gutter:stable;scrollbar-color:#496789 #091626;scrollbar-width:auto}.tablebox::-webkit-scrollbar{width:14px;height:14px}.tablebox::-webkit-scrollbar-track{background:#091626}.tablebox::-webkit-scrollbar-thumb{background:#496789;border:3px solid #091626;border-radius:10px}table{width:100%;min-width:3100px;border-collapse:separate;border-spacing:0}th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);white-space:nowrap}th{position:sticky;top:0;z-index:2;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.7px;background:#0a1728}tr:last-child td{border:0}tbody tr:hover{background:#13243a}.reason{white-space:normal;min-width:320px;max-width:460px}.badge{display:inline-block;padding:5px 9px;border-radius:20px;font-size:11px;font-weight:700;text-transform:uppercase}.critical{background:#4a1322;color:#ff7890}.high{background:#492d0f;color:#ffc36b}.medium{background:#123552;color:#77bfff}.low{background:#123b31;color:#65e0b3}.empty{text-align:center;color:var(--muted);padding:50px!important}.foot{color:var(--muted);font-size:12px;margin-top:12px;text-align:right}@media(max-width:850px){.cards{grid-template-columns:repeat(2,1fr)}.top{align-items:flex-start;flex-direction:column}}@media(max-width:480px){.cards{grid-template-columns:1fr}.toolbar{flex-direction:column}}
 </style></head><body><main>
-<div class="top"><div><h1>AI-Powered Performance Monitoring Agent</h1><div class="subtitle">AI agent detections across services and environments</div></div><div class="live"><span class="dot"></span>LIVE MONITORING</div></div>
+<div class="top"><div><h1>AI-Powered Performance Monitoring Agent</h1><div class="subtitle">AI agent detections across services and environments</div></div><div><a href="/configure" style="color:var(--blue);margin-right:24px">Configure machines</a><span class="live" style="display:inline-flex"><span class="dot"></span>LIVE MONITORING</span></div></div>
 <section class="cards"><div class="card"><div class="label">Total incidents</div><div class="value" id="total">—</div></div><div class="card"><div class="label">Critical</div><div class="value" id="critical">—</div></div><div class="card"><div class="label">Environments</div><div class="value" id="envs">—</div></div><div class="card"><div class="label">Latest detection</div><div class="value" id="latest" style="font-size:17px">—</div></div></section>
 <div class="toolbar"><input id="search" placeholder="Search service or reason…"><select id="environment"><option value="">All environments</option></select><select id="severity"><option value="">All severities</option><option>critical</option><option>high</option><option>medium</option><option>low</option></select></div>
 <div class="tablebox"><table><thead><tr><th>Detected at</th><th>Incident</th><th>Environment</th><th>Machine</th><th>Severity</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Network ↓/↑</th><th>Processes</th><th>JVM Heap</th><th>GC (Young/Full)</th><th>JVM Threads</th><th>Classes</th><th>Detected issue</th><th>Cause</th><th>LLM Analysis</th><th>Suggested Solution</th></tr></thead><tbody id="rows"></tbody></table></div><div class="foot" id="updated"></div>
@@ -139,13 +140,23 @@ HTML = r'''<!doctype html>
 let issues=[];const $=id=>document.getElementById(id);function esc(v){return String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function pct(v){return v==null?'—':`${Number(v).toFixed(1)}%`}function date(v){if(!v)return'—';return new Date(v).toLocaleString([], {dateStyle:'medium',timeStyle:'medium'})}function jvm(v,f){return v.jvm_available?f:'No JVM'}function render(){const q=$('search').value.toLowerCase(),env=$('environment').value,sev=$('severity').value;const shown=issues.filter(x=>(!env||x.environment===env)&&(!sev||x.severity===sev)&&(!q||`${x.incident_id} ${x.machine_name} ${x.service} ${x.reason} ${x.cause} ${x.llm_analysis} ${x.suggested_solution}`.toLowerCase().includes(q)));$('rows').innerHTML=shown.length?shown.map(x=>`<tr><td>${esc(date(x.timestamp))}</td><td>${esc(x.incident_id)}</td><td>${esc(x.environment)}</td><td title="${esc(x.operating_system)} · ${esc(x.machine_ip)}">${esc(x.machine_name)}</td><td><span class="badge ${esc(x.severity)}">${esc(x.severity)}</span></td><td>${pct(x.cpu_percent)}</td><td>${pct(x.memory_percent)}</td><td>${pct(x.disk_percent)}</td><td>${esc(x.network_received_mb_s??'—')} / ${esc(x.network_sent_mb_s??'—')} MB/s</td><td>${esc(x.process_count)} <span title="Zombie processes">(${esc(x.zombie_process_count??0)} zombie)</span></td><td>${esc(jvm(x,pct(x.jvm_heap_percent)))}</td><td>${esc(jvm(x,`${x.jvm_young_gc_count??'—'} / ${x.jvm_full_gc_count??'—'}`))}</td><td>${esc(jvm(x,x.jvm_thread_count??'—'))}</td><td>${esc(jvm(x,`${x.jvm_classes_loaded??'—'} / ${x.jvm_classes_unloaded??'—'}`))}</td><td class="reason">${esc(x.reason).replaceAll('_',' ')}</td><td class="reason">${esc(x.cause)}</td><td class="reason" title="Model: ${esc(x.llm_model)} · Confidence: ${esc(x.llm_confidence)}">${esc(x.llm_analysis)}</td><td class="reason">${esc(x.suggested_solution)}</td></tr>`).join(''):'<tr><td class="empty" colspan="18">No incidents match these filters.</td></tr>'}async function refresh(){try{const r=await fetch('/api/issues?limit=500',{cache:'no-store'});issues=await r.json();$('total').textContent=issues.length;$('critical').textContent=issues.filter(x=>x.severity==='critical').length;const envs=[...new Set(issues.map(x=>x.environment))];$('envs').textContent=envs.length;const chosen=$('environment').value;$('environment').innerHTML='<option value="">All environments</option>'+envs.map(x=>`<option>${esc(x)}</option>`).join('');$('environment').value=chosen;$('latest').textContent=issues.length?date(issues[0].timestamp):'No detections';$('updated').textContent=`Updated ${new Date().toLocaleTimeString()}`;render()}catch(e){$('updated').textContent='Dashboard API unavailable'}}['search','environment','severity'].forEach(x=>$(x).addEventListener(x==='search'?'input':'change',render));refresh();setInterval(refresh,5000);
 </script></body></html>'''
 
+CONFIG_HTML = r'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Configure machines</title><style>
+:root{color-scheme:dark;--bg:#07111f;--panel:#0e1b2d;--line:#21334b;--muted:#91a4bd;--text:#eef5ff;--blue:#54a8ff;--red:#ff5876;--green:#42d9a1}*{box-sizing:border-box}body{margin:0;font:14px Segoe UI,Arial;background:var(--bg);color:var(--text)}main{max-width:1050px;margin:auto;padding:32px 24px}a{color:var(--blue)}.top{display:flex;justify-content:space-between;align-items:center}.panel{margin-top:24px;padding:22px;background:var(--panel);border:1px solid var(--line);border-radius:14px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:15px}label{display:grid;gap:7px;color:var(--muted)}input{padding:11px;background:#091626;color:var(--text);border:1px solid var(--line);border-radius:8px}.wide{grid-column:1/-1}.actions{display:flex;gap:10px;margin-top:18px}button{border:0;border-radius:8px;padding:10px 16px;background:var(--blue);color:#04101e;font-weight:700;cursor:pointer}.secondary{background:#263a53;color:var(--text)}.danger{background:#4a1322;color:#ff7890}.machine{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)}.machine:last-child{border:0}.muted{color:var(--muted);margin-top:5px}.status{color:var(--green)}#message{min-height:20px;margin-top:12px}@media(max-width:650px){.grid{grid-template-columns:1fr}.wide{grid-column:auto}.machine{align-items:flex-start;gap:15px}}
+</style></head><body><main><div class="top"><div><h1>Configure machines</h1><div class="muted">Add Linux machines for SSH monitoring.</div></div><a href="/">Back to dashboard</a></div><section class="panel"><h2 id="formTitle">Add machine</h2><form id="form"><input type="hidden" id="id"><div class="grid"><label>Display name<input id="name" placeholder="Payment server"></label><label>IP address *<input id="ip_address" required placeholder="10.0.0.25"></label><label>SSH username *<input id="username" required placeholder="monitor"></label><label>SSH password<input id="password" type="password" placeholder="Required for password authentication"></label><label>SSH port<input id="port" type="number" value="22" min="1" max="65535"></label><label>Environment<input id="environment" placeholder="production"></label><label>Service name<input id="service_name" placeholder="payment-api"></label><label style="display:flex;align-items:center;flex-direction:row;margin-top:25px"><input id="enabled" type="checkbox" checked> Monitoring enabled</label></div><div class="actions"><button type="submit">Save machine</button><button type="button" class="secondary" onclick="resetForm()">Cancel</button></div><div id="message"></div></form></section><section class="panel"><h2>Configured machines</h2><div id="machines"></div></section></main><script>
+const $=id=>document.getElementById(id);let machines=[];const fields=['name','ip_address','username','port','environment','service_name'];function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}async function load(){const r=await fetch('/api/machines',{cache:'no-store'});machines=await r.json();$('machines').innerHTML=machines.length?machines.map(m=>`<div class="machine"><div><b>${esc(m.name)}</b> <span class="status">${m.enabled?'Monitoring':'Paused'}</span><div class="muted">${esc(m.username)}@${esc(m.ip_address)}:${esc(m.port)} · ${esc(m.environment||'auto-detected')} · Password ${m.password_configured?'configured':'not set'}</div></div><div class="actions"><button class="secondary" onclick="edit('${m.id}')">Edit</button><button class="danger" onclick="removeMachine('${m.id}')">Delete</button></div></div>`).join(''):'<div class="muted">No remote machines configured. The agent monitors its local host.</div>'}function resetForm(){$('form').reset();$('id').value='';$('port').value=22;$('enabled').checked=true;$('formTitle').textContent='Add machine';$('message').textContent=''}function edit(id){const m=machines.find(x=>x.id===id);fields.forEach(f=>$(f).value=m[f]??'');$('id').value=m.id;$('enabled').checked=m.enabled;$('password').value='';$('password').placeholder=m.password_configured?'Leave blank to keep existing password':'Enter SSH password';$('formTitle').textContent='Edit machine';scrollTo(0,0)}async function removeMachine(id){if(!confirm('Delete this machine configuration?'))return;await fetch('/api/machines/'+id,{method:'DELETE'});load()}$('form').addEventListener('submit',async e=>{e.preventDefault();const body={};fields.forEach(f=>body[f]=$(f).value);body.password=$('password').value;body.enabled=$('enabled').checked;const id=$('id').value;const r=await fetch('/api/machines'+(id?'/'+id:''),{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok){$('message').textContent=data.error;return}resetForm();$('message').textContent='Machine saved. The agent will pick it up on its next cycle.';load()});load();
+</script></body></html>'''
 
-def make_handler(artifact_dir: Path):
+
+def make_handler(artifact_dir: Path, config_path: str | Path = "configs/config.yaml"):
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             request = urlparse(self.path)
             if request.path == "/":
                 self._send(200, HTML.encode(), "text/html; charset=utf-8")
+            elif request.path == "/configure":
+                self._send(200, CONFIG_HTML.encode(), "text/html; charset=utf-8")
+            elif request.path == "/api/machines":
+                self._json(200, list_machines(config_path))
             elif request.path == "/api/issues":
                 query = parse_qs(request.query)
                 try:
@@ -158,6 +169,40 @@ def make_handler(artifact_dir: Path):
                 self._send(200, b'{"status":"ok"}', "application/json")
             else:
                 self._send(404, b'{"error":"not found"}', "application/json")
+
+        def do_POST(self):
+            if urlparse(self.path).path != "/api/machines":
+                return self._json(404, {"error": "not found"})
+            self._save_machine(None)
+
+        def do_PUT(self):
+            prefix = "/api/machines/"
+            path = urlparse(self.path).path
+            if not path.startswith(prefix):
+                return self._json(404, {"error": "not found"})
+            self._save_machine(path[len(prefix):])
+
+        def do_DELETE(self):
+            prefix = "/api/machines/"
+            path = urlparse(self.path).path
+            if not path.startswith(prefix):
+                return self._json(404, {"error": "not found"})
+            self._json(200 if delete_machine(config_path, path[len(prefix):]) else 404, {"deleted": True})
+
+        def _save_machine(self, machine_id):
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                if length > 65536:
+                    raise ValueError("request is too large")
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                self._json(200 if machine_id else 201, save_machine(config_path, payload, machine_id))
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                self._json(400, {"error": str(exc)})
+            except KeyError as exc:
+                self._json(404, {"error": str(exc)})
+
+        def _json(self, status, payload):
+            self._send(status, json.dumps(payload).encode(), "application/json")
 
         def _send(self, status, body, content_type):
             self.send_response(status)
@@ -182,7 +227,7 @@ def main():
     args = parser.parse_args()
     config = load_config(args.config)
     configure_logging(config, "dashboard")
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(Path(args.artifacts)))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(Path(args.artifacts), args.config))
     logger.info("Dashboard running at http://%s:%s", args.host, args.port)
     try:
         server.serve_forever()

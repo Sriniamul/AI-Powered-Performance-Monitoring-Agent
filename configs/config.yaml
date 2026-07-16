@@ -5,6 +5,10 @@ agent:
   artifact_dir: artifacts
   dry_run: true
 
+# Remote Linux machines configured from the dashboard. When this list is empty,
+# the agent continues to monitor the machine on which it is running.
+machines: []
+
 logging:
   directory: logs
   level: INFO

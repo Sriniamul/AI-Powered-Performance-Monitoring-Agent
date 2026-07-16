@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
+from copy import deepcopy
+from pathlib import Path
 
 from agent.collectors.cpu_collector import CpuCollector
 from agent.collectors.memory_collector import MemoryCollector
 from agent.collectors.machine_collector import MachineCollector
+from agent.collectors.remote_machine_collector import RemoteMachineCollector
 from agent.collectors.process_collector import ProcessCollector
 from agent.collectors.disk_collector import DiskCollector
 from agent.collectors.network_collector import NetworkCollector
@@ -28,11 +31,19 @@ logger = get_logger(__name__)
 class AgentController:
     """Coordinates metric collection, anomaly detection, diagnostics, artifacts, and JIRA workflow."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, machine: dict | None = None):
+        config = deepcopy(config)
+        if machine:
+            anomaly = config.setdefault("anomaly", {})
+            configured_state = Path(anomaly.get("state_path", "artifacts/anomaly_state.json"))
+            anomaly["state_path"] = str(configured_state.with_name(
+                f"{configured_state.stem}_{machine.get('id', 'remote')}{configured_state.suffix}"
+            ))
         self.config = config
+        self.target_machine = machine
         self.cpu_collector = CpuCollector()
         self.memory_collector = MemoryCollector()
-        self.machine_collector = MachineCollector()
+        self.machine_collector = RemoteMachineCollector(machine) if machine else MachineCollector()
         self.process_collector = ProcessCollector()
         self.disk_collector = DiskCollector(config.get("disk", {}).get("path", "."))
         self.network_collector = NetworkCollector()
@@ -64,7 +75,7 @@ class AgentController:
             return {"status": "no_action", "metrics": metrics, "decision": decision.to_dict()}
 
         duplicate = self.incident_deduplicator.find_duplicate(
-            metrics.get("service_name", "unknown-service"), decision.anomaly_types
+            self._incident_scope(metrics), decision.anomaly_types
         )
         if duplicate:
             logger.info("Duplicate incident suppressed. existing_issue=%s", duplicate.get("issue_key"))
@@ -92,7 +103,7 @@ class AgentController:
         issue_key = self.issue_creator.create_incident(metrics, decision.to_dict(), insights, artifacts)
         self.artifacts.record_issue_key(artifacts["metrics_snapshot"], issue_key)
         self.incident_deduplicator.record(
-            metrics.get("service_name", "unknown-service"), decision.anomaly_types, issue_key
+            self._incident_scope(metrics), decision.anomaly_types, issue_key
         )
         self.notifier.notify(issue_key, decision.to_dict(), insights)
 
@@ -112,6 +123,11 @@ class AgentController:
             "environment": machine["os_environment"],
         }
         metrics.update(machine)
+        if self.target_machine:
+            metrics["service_name"] = self.target_machine.get("service_name") or metrics["service_name"]
+            metrics["environment"] = self.target_machine.get("environment") or metrics["environment"]
+            metrics["target_id"] = self.target_machine.get("id")
+            return metrics
         metrics.update(self.cpu_collector.collect())
         metrics.update(self.memory_collector.collect())
         metrics.update(self.process_collector.collect())
@@ -120,3 +136,8 @@ class AgentController:
         metrics.update(self.jvm_collector.collect())
         metrics.update(self.trace_collector.collect())
         return metrics
+
+    def _incident_scope(self, metrics: dict) -> str:
+        service = metrics.get("service_name", "unknown-service")
+        target = getattr(self, "target_machine", None)
+        return f"{service}@{target.get('id')}" if target else service

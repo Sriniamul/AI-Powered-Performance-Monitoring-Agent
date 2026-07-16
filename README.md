@@ -195,6 +195,21 @@ The Java memory leak example is located at `scripts/simulate_memory_leak.java`.
 
 The primary configuration file is `configs/config.yaml`.
 
+### Configure remote machines
+
+Start the dashboard and open `http://127.0.0.1:8080/configure`:
+
+```bash
+python -m agent.dashboard --config configs/config.yaml
+```
+
+Add one or more Linux machines with their IP address, SSH username, password, and
+optional service/environment labels. The running agent reloads this list on each
+polling pass and monitors every enabled machine. Remote hosts must allow SSH and
+provide `python3`; password-based settings are stored in the YAML file, so restrict
+access to it. If no remote machines are configured, local-host monitoring remains
+active.
+
 ### Log rotation and artifact retention
 
 ```yaml

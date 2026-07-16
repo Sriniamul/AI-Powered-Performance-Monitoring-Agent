@@ -21,17 +21,33 @@ def main():
     args = parse_args()
     config = load_config(args.config)
     configure_logging(config, "agent")
-    controller = AgentController(config)
-
     if args.once:
-        controller.run_cycle()
+        _run_configured_cycles(config)
         return
 
     interval = int(config.get("agent", {}).get("poll_interval_seconds", 5))
     logger.info("Starting AI Performance Agent. Poll interval=%s seconds", interval)
     while True:
-        controller.run_cycle()
+        try:
+            config = load_config(args.config)
+            _run_configured_cycles(config)
+        except Exception:
+            logger.exception("Monitoring cycle failed")
         time.sleep(interval)
+
+
+def _run_configured_cycles(config):
+    machines = [m for m in config.get("machines", []) if m.get("enabled", True)]
+    if not machines:
+        return [AgentController(config).run_cycle()]
+    results = []
+    for machine in machines:
+        try:
+            results.append(AgentController(config, machine).run_cycle())
+        except Exception as exc:
+            logger.exception("Unable to monitor machine %s", machine.get("name") or machine.get("ip_address"))
+            results.append({"status": "connection_error", "machine": machine.get("id"), "error": str(exc)})
+    return results
 
 
 if __name__ == "__main__":
